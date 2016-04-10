@@ -1,52 +1,59 @@
-# You can set these variables from the command line:
-SPHINXOPTS  := -W
-SPHINXBUILD := sphinx-build
-PAPER       :=
+.PHONY: all clean test validate
 
-ifeq ($(shell uname -s),Linux)
-BROWSER     := x-www-browser
-else
-BROWSER     := open
-endif
+NARRATIVE = \
+	intro.html \
+	install.html \
+	start.html \
+	wd.html \
+	remote.html \
+	best.html \
+	worst.html \
+	grid.html \
+	drivers.html \
+	java.html
 
-# Internal variables
-ROOT            = $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-PAPEROPT_a4     = -D latex_paper_size=a4
-PAPEROPT_letter = -D latex_paper_size=letter
-ALLSPHINXOPTS   = -d _build/doctrees $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
+FRONTMATTER = \
+	attr.html \
+	typo.html
 
-.PHONY: all clean html check themes open
+CONTENTS = index.html quick.html $(NARRATIVE) $(FRONTMATTER)
 
-all: AUTHORS html
+all: AUTHORS $(CONTENTS)
 
 clean:
-	-rm -rf _build/*
-	-rm -rf authors.rst AUTHORS
+	rm -f AUTHORS
+	rm -f *.tmp*
 
-_build/doctrees:
-	mkdir -p _build/doctrees
+test: validate
 
-html: authors.rst _build/doctrees themes
-	mkdir -p _build/html
-	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) _build/html
-	@echo
-	@echo "Build finished.  The HTML pages are in _build/html."
+validate:
+	@for f in $(CONTENTS) ; do \
+		curl -s -F laxtype=yes -F parser=html5 -F level=error -F out=gnu -F doc=@$$f https://validator.nu ; \
+	done
 
-linkcheck: _build/doctrees
-	mkdir -p _build/linkcheck
-	$(SPHINXBUILD) -b linkcheck $(ALLSPHINXOPTS) _build/linkcheck
-	@echo
-	@echo "Link check complete.  Look for any errors in the above output " \
-	      "or in _build/linkcheck/output.txt."
+gettingstarted.tmp: quick.html
+	./maketoc -m2 $^ > $@
 
-themes:
-	@true
+narrative.tmp: $(NARRATIVE)
+	./maketoc -m2 $^ > $@
+
+frontmatter.tmp: $(FRONTMATTER)
+	./maketoc -m2 $^ > $@
+
+index.html: gettingstarted.tmp narrative.tmp frontmatter.tmp
+	./hs '#gettingstarted' @gettingstarted.tmp $@ > $@.tmp
+	./hs '#narrative' @narrative.tmp $@.tmp > $@.tmp2
+	./hs '#frontmatter' @frontmatter.tmp $@.tmp2 > $@
+	rm -f *.tmp*
 
 AUTHORS:
 	git log --use-mailmap --format="%aN <%aE>" | sort -uf > $@
 
-authors.rst:
-	git log --use-mailmap --format="* %aN" | sort -uf > $@
+authors.tmp: AUTHORS
+	echo "<ul>" >> $@
+	git log --use-mailmap --format=" <li><a href=mailto:%aE>%aN</a>" | sort -uf >> $@
+	echo "</ul>" >> $@
 
-open: html
-	$(BROWSER) "file://$(ROOT)/_build/html/index.html"
+attr.html: authors.tmp
+	./hs '#authors' @$< $@ > $@.tmp
+	mv $@.tmp $@
